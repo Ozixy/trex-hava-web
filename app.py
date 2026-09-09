@@ -3,7 +3,12 @@ import requests
 
 app = Flask(__name__)
 
-# Türkiye 81 İl ve Avrupa'nın Önemli Ülkeleri / Şehirleri
+# LilyGO kartının okuyacağı sunucu tarafındaki aktif konum belleği
+aktif_konum = {
+    "ulke": "Türkiye",
+    "sehir": "Bursa"
+}
+
 DunyaVeritabani = {
     "Türkiye": {
         "Adana": {"lat": 37.0000, "lon": 35.3213},
@@ -130,49 +135,47 @@ DunyaVeritabani = {
 
 def hava_durumu_acikla(weathercode):
     if weathercode == 0:
-        return "Açık", "☀️"
+        return "Gunesli", "☀️"
     elif weathercode in [1, 2, 3]:
         return "Bulutlu", "☁️"
-    elif weathercode in [51, 53, 55, 61, 63, 65]:
-        return "Yağmurlu", "🌧️"
-    elif weathercode in [71, 73, 75, 77]:
-        return "Karlı", "❄️"
+    elif weathercode in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
+        return "Yagmurlu", "🌧️"
+    elif weathercode in [71, 73, 75, 77, 85, 86]:
+        return "Karli", "❄️"
     elif weathercode in [95, 96, 99]:
-        return "Fırtınalı", "⚡"
+        return "Firtina", "⚡"
     else:
-        return "Parçalı Bulutlu", "⛅"
+        return "Parcali Bulutlu", "⛅"
 
 @app.route("/")
 def index():
-    # Ülkeleri alfabetik olarak ana sayfaya gönderiyoruz
     sirali_ulkeler = sorted(DunyaVeritabani.keys())
-    return render_template("index.html", ulkeler=sirali_ulkeler)
+    return render_template("index.html", ulkeler=sirali_ulkeler, aktif_ulke=aktif_konum["ulke"], aktif_sehir=aktif_konum["sehir"])
 
 @app.route("/api/sehirler")
 def sehirleri_getir():
     ulke = request.args.get("ulke", "Türkiye")
     if ulke in DunyaVeritabani:
-        # İlgili ülkenin şehirlerini alfabetik sıralayıp döndür
         return jsonify(sorted(list(DunyaVeritabani[ulke].keys())))
     return jsonify([])
 
 @app.route("/api/hava")
 def hava_durumu_getir():
-    ulke = request.args.get("ulke", "Türkiye")
-    sehir = request.args.get("sehir", "Bursa")
+    ulke = request.args.get("ulke", aktif_konum["ulke"])
+    sehir = request.args.get("sehir", aktif_konum["sehir"])
     
     try:
         lat = DunyaVeritabani[ulke][sehir]["lat"]
         lon = DunyaVeritabani[ulke][sehir]["lon"]
     except KeyError:
-        lat, lon = 40.1828, 29.0665  # Varsayılan Bursa
+        lat, lon = 40.1828, 29.0665
         sehir = "Bursa"
         ulke = "Türkiye"
 
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weathercode"
     
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=5)
         data = response.json()
         current = data.get("current", {})
         sicaklik = current.get("temperature_2m", 0)
@@ -182,9 +185,55 @@ def hava_durumu_getir():
         return jsonify({
             "sehir": sehir,
             "ulke": ulke,
-            "sicaklik": sicaklik,
+            "sicaklik": round(sicaklik),
             "durum": durum,
-            "ikon": ikon
+            "ikon": ikon,
+            "weathercode": weathercode
+        })
+    except Exception as e:
+        return jsonify({"hata": str(e)}), 500
+
+# WEB SİTESİNDEN ŞEHRİ KAYDETMEK İÇİN ROTAMIZ
+@app.route("/api/kaydet", methods=["POST"])
+def konumu_kaydet():
+    req = request.get_json(silent=True) or {}
+    ulke = req.get("ulke")
+    sehir = req.get("sehir")
+
+    if ulke in DunyaVeritabani and sehir in DunyaVeritabani[ulke]:
+        aktif_konum["ulke"] = ulke
+        aktif_konum["sehir"] = sehir
+        return jsonify({"durum": "basarili", "ulke": ulke, "sehir": sehir})
+    
+    return jsonify({"durum": "hata", "mesaj": "Gecersiz konum"}), 400
+
+# LILYGO KARTININ DÜZENLİ SORGULAYACAĞI JSON UÇ NOKTASI
+@app.route("/api/cihaz-hava")
+def cihaz_hava():
+    ulke = aktif_konum["ulke"]
+    sehir = aktif_konum["sehir"]
+    lat = DunyaVeritabani[ulke][sehir]["lat"]
+    lon = DunyaVeritabani[ulke][sehir]["lon"]
+
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weathercode"
+    try:
+        response = requests.get(url, timeout=5)
+        data = response.json()
+        current = data.get("current", {})
+        temp = round(current.get("temperature_2m", 0))
+        code = current.get("weathercode", 0)
+        durum, _ = hava_durumu_acikla(code)
+
+        # ASCII uyumlu temiz Türkçe karakter dönüşümü (ESP32 TFT ekranda bozulmasın diye)
+        temiz_sehir = sehir.replace("ı", "i").replace("İ", "I").replace("ş", "s").replace("Ş", "S").replace("ğ", "g").replace("Ğ", "G").replace("ü", "u").replace("Ü", "U").replace("ö", "o").replace("Ö", "O").replace("ç", "c").replace("Ç", "C")
+        temiz_ulke = ulke.replace("ü", "u").replace("Ü", "U")
+
+        return jsonify({
+            "sehir": temiz_sehir,
+            "ulke": temiz_ulke,
+            "sicaklik": temp,
+            "durum": durum,
+            "code": code
         })
     except Exception as e:
         return jsonify({"hata": str(e)}), 500

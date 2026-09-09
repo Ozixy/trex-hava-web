@@ -42,10 +42,9 @@
             max-width: 1200px;
             margin: 0 auto;
         }
-        /* Kontrol Paneli Alanı */
         .controls {
             display: flex;
-            gap: 25px;
+            gap: 20px;
             background: var(--card-bg);
             padding: 25px;
             border-radius: 10px;
@@ -53,9 +52,11 @@
             margin-bottom: 30px;
             align-items: flex-end;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+            flex-wrap: wrap;
         }
         .control-group {
             flex: 1;
+            min-width: 200px;
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -75,15 +76,26 @@
             border-radius: 8px;
             font-size: 15px;
             outline: none;
-            transition: all 0.3s ease;
             cursor: pointer;
         }
-        .controls select:hover, .controls select:focus {
-            border-color: var(--primary-green);
-            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+        .btn-kaydet {
+            background: linear-gradient(180deg, #10b981, #059669);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+            transition: all 0.2s ease;
+            height: 46px;
         }
-
-        /* Metrik Kartları */
+        .btn-kaydet:hover {
+            background: #059669;
+            box-shadow: 0 0 16px rgba(16, 185, 129, 0.6);
+            transform: translateY(-1px);
+        }
         .card-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -112,27 +124,21 @@
             align-items: center;
             gap: 15px;
         }
-        .trend-arrow {
-            font-size: 24px;
-            font-weight: bold;
-        }
+        .trend-arrow { font-size: 24px; font-weight: bold; }
         .trend-up { color: #22c55e; }
         .trend-down { color: #ef4444; }
         
-        /* Log Tablosu Alanı */
         .log-section {
             background: var(--card-bg);
             border: 1px solid var(--border-color);
             border-radius: 10px;
             padding: 25px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
         .log-section h3 {
             margin-top: 0;
             font-size: 18px;
             border-bottom: 1px solid var(--border-color);
             padding-bottom: 12px;
-            color: var(--text-light);
         }
         table {
             width: 100%;
@@ -150,9 +156,6 @@
             font-weight: 600;
             background-color: rgba(15, 23, 42, 0.5);
         }
-        tr:hover td {
-            background-color: rgba(255, 255, 255, 0.02);
-        }
     </style>
 </head>
 <body>
@@ -161,33 +164,35 @@
         <div class="logo">
             <span>🟢 TREX HAVA YÖNETİM PANELİ</span>
         </div>
-        <div style="font-size: 14px; color: var(--text-muted);">Sistem Durumu: <span style="color: var(--primary-green); font-weight: 600;">● Canlı İzleme</span></div>
+        <div style="font-size: 14px; color: var(--text-muted);">
+            Sistem Durumu: <span id="syncDurum" style="color: var(--primary-green); font-weight: 600;">● Canlı Senkronize</span>
+        </div>
     </header>
 
     <div class="container">
-        <!-- Kurumsal Kontrol Paneli -->
         <div class="controls">
             <div class="control-group">
                 <label for="ulkeSelect">Ülke Seçimi</label>
                 <select id="ulkeSelect" onchange="sehirleriGuncelle()">
                     {% for ulke in ulkeler %}
-                    <option value="{{ ulke }}" {% if ulke == 'Türkiye' %}selected{% endif %}>{{ ulke }}</option>
+                    <option value="{{ ulke }}" {% if ulke == aktif_ulke %}selected{% endif %}>{{ ulke }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="control-group">
-                <label for="sehirSelect">Şehir / İl Seçimi (81 İl ve Avrupa)</label>
+                <label for="sehirSelect">Şehir / İl Seçimi</label>
                 <select id="sehirSelect" onchange="havaVerisiniCek()">
-                    <!-- Dinamik olarak dolacak -->
                 </select>
+            </div>
+            <div>
+                <button class="btn-kaydet" onclick="kartaGonder()">📡 KARTA GÖNDER (KAYDET)</button>
             </div>
         </div>
 
-        <!-- Metrik Kartları -->
         <div class="card-grid">
             <div class="metric-card">
                 <div class="metric-title">Seçilen Aktif Konum</div>
-                <div class="metric-value" id="lblKonum" style="font-size: 26px;">Türkiye / Bursa</div>
+                <div class="metric-value" id="lblKonum" style="font-size: 26px;">--</div>
             </div>
             <div class="metric-card">
                 <div class="metric-title">Anlık Sıcaklık</div>
@@ -198,26 +203,24 @@
             </div>
             <div class="metric-card">
                 <div class="metric-title">Hava Durumu Durumu</div>
-                <div class="metric-value" id="lblDurum" style="font-size: 28px;">-- ☁️</div>
+                <div class="metric-value" id="lblDurum" style="font-size: 28px;">--</div>
             </div>
         </div>
 
-        <!-- Son Olaylar / Log Tablosu -->
         <div class="log-section">
-            <h3>Anlık Değişim ve Olay Akışı (Log)</h3>
+            <h3>Cihaz İletişim ve Olay Akışı</h3>
             <table>
                 <thead>
                     <tr>
                         <th>Zaman</th>
+                        <th>İşlem</th>
                         <th>Konum</th>
-                        <th>Eski Değer</th>
-                        <th>Yeni Değer</th>
-                        <th>Durum Özeti</th>
+                        <th>Detay</th>
                     </tr>
                 </thead>
                 <tbody id="logTablosu">
                     <tr>
-                        <td colspan="5" style="text-align: center; color: var(--text-muted);">Veri akışı bekleniyor. Şehir seçimi yapıldı veya güncellendi.</td>
+                        <td colspan="4" style="text-align: center; color: var(--text-muted);">Kayıtlı işlem bekleniyor...</td>
                     </tr>
                 </tbody>
             </table>
@@ -225,7 +228,7 @@
     </div>
 
     <script>
-        let eskiSicaklik = null;
+        let ilkYuklemeSehir = "{{ aktif_sehir }}";
 
         function sehirleriGuncelle() {
             const ulke = document.getElementById("ulkeSelect").value;
@@ -238,9 +241,10 @@
                         let opt = document.createElement("option");
                         opt.value = sehir;
                         opt.textContent = sehir;
+                        if (sehir === ilkYuklemeSehir) opt.selected = true;
                         sehirSelect.appendChild(opt);
                     });
-                    // İlk şehri seçip hava durumunu çek
+                    ilkYuklemeSehir = "";
                     havaVerisiniCek();
                 });
         }
@@ -255,52 +259,50 @@
                 .then(data => {
                     document.getElementById("lblKonum").textContent = `${data.ulke} / ${data.sehir}`;
                     document.getElementById("lblDurum").textContent = `${data.durum} ${data.ikon}`;
-                    
-                    const yeniSicaklik = parseFloat(data.sicaklik);
-                    document.getElementById("lblSicaklik").textContent = yeniSicaklik;
-
-                    const trendEl = document.getElementById("lblTrend");
-                    
-                    if (eskiSicaklik !== null && eskiSicaklik !== yeniSicaklik) {
-                        let zaman = new Date().toLocaleTimeString();
-                        let okIsareti = "";
-                        
-                        if (yeniSicaklik > eskiSicaklik) {
-                            okIsareti = "↑";
-                            trendEl.className = "trend-arrow trend-up";
-                            trendEl.textContent = "↑";
-                        } else {
-                            okIsareti = "↓";
-                            trendEl.className = "trend-arrow trend-down";
-                            trendEl.textContent = "↓";
-                        }
-
-                        const tbody = document.getElementById("logTablosu");
-                        if (tbody.querySelector("td[colspan]")) {
-                            tbody.innerHTML = "";
-                        }
-
-                        let yeniSatir = `<tr>
-                            <td>${zaman}</td>
-                            <td>${data.sehir}, ${data.ulke}</td>
-                            <td>${eskiSicaklik}°C</td>
-                            <td>${yeniSicaklik}°C <span class="${okIsareti === '↑' ? 'trend-up' : 'trend-down'}">${okIsareti}</span></td>
-                            <td>${data.durum} ${data.ikon}</td>
-                        </tr>`;
-                        tbody.insertAdjacentHTML('afterbegin', yeniSatir);
-                    } else if (eskiSicaklik === yeniSicaklik) {
-                        trendEl.textContent = "";
-                    }
-
-                    eskiSicaklik = yeniSicaklik;
+                    document.getElementById("lblSicaklik").textContent = data.sicaklik;
                 });
         }
 
-        // Sayfa ilk yüklendiğinde çalışacak
+        function kartaGonder() {
+            const ulke = document.getElementById("ulkeSelect").value;
+            const sehir = document.getElementById("sehirSelect").value;
+            const syncEl = document.getElementById("syncDurum");
+
+            syncEl.innerHTML = "⏳ Karta Gönderiliyor...";
+            syncEl.style.color = "#fbbf24";
+
+            fetch('/api/kaydet', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ulke: ulke, sehir: sehir })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.durum === "basarili") {
+                    syncEl.innerHTML = "● Karta İletildi!";
+                    syncEl.style.color = "#10b981";
+
+                    let zaman = new Date().toLocaleTimeString();
+                    const tbody = document.getElementById("logTablosu");
+                    if (tbody.querySelector("td[colspan]")) tbody.innerHTML = "";
+                    
+                    let row = `<tr>
+                        <td>${zaman}</td>
+                        <td style="color:#10b981; font-weight:bold;">KART GÜNCELLENDİ</td>
+                        <td>${data.ulke} / ${data.sehir}</td>
+                        <td>LilyGO kartı için aktif hedef güncellendi.</td>
+                    </tr>`;
+                    tbody.insertAdjacentHTML('afterbegin', row);
+                }
+            })
+            .catch(err => {
+                syncEl.innerHTML = "❌ Hata Oluştu";
+                syncEl.style.color = "#ef4444";
+            });
+        }
+
         window.onload = function() {
             sehirleriGuncelle();
-            // Her 30 saniyede bir otomatik veri tazeleme
-            setInterval(havaVerisiniCek, 30000);
         };
     </script>
 </body>

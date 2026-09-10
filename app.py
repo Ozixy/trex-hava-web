@@ -55,7 +55,7 @@ def sehirleri_getir():
 def hava_durumu_getir():
     ulke = request.args.get("ulke", aktif_konum["ulke"])
     sehir = request.args.get("sehir", aktif_konum["sehir"])
-    
+
     try:
         lat = DunyaVeritabani[ulke][sehir]["lat"]
         lon = DunyaVeritabani[ulke][sehir]["lon"]
@@ -64,16 +64,16 @@ def hava_durumu_getir():
         sehir = "Bursa"
         ulke = "Türkiye"
 
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weathercode"
-    
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code"
+
     try:
         response = requests.get(url, timeout=5)
         data = response.json()
         current = data.get("current", {})
         sicaklik = current.get("temperature_2m", 0)
-        weathercode = current.get("weathercode", 0)
+        weathercode = current.get("weather_code", 0)
         durum, ikon = hava_durumu_acikla(weathercode)
-        
+
         return jsonify({
             "sehir": sehir,
             "ulke": ulke,
@@ -97,7 +97,7 @@ def konumu_kaydet():
         aktif_konum["ulke"] = ulke
         aktif_konum["sehir"] = sehir
         return jsonify({"durum": "basarili", "ulke": ulke, "sehir": sehir})
-    
+
     return jsonify({"durum": "hata", "mesaj": "Gecersiz konum"}), 400
 
 # LilyGO kartının 3 saniyede bir sorguladığı JSON uç noktası
@@ -105,7 +105,7 @@ def konumu_kaydet():
 def cihaz_hava():
     ulke = aktif_konum["ulke"]
     sehir = aktif_konum["sehir"]
-    
+
     try:
         lat = DunyaVeritabani[ulke][sehir]["lat"]
         lon = DunyaVeritabani[ulke][sehir]["lon"]
@@ -114,13 +114,13 @@ def cihaz_hava():
         sehir = "Bursa"
         ulke = "Türkiye"
 
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weathercode"
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code"
     try:
         response = requests.get(url, timeout=5)
         data = response.json()
         current = data.get("current", {})
         temp = round(current.get("temperature_2m", 0))
-        code = current.get("weathercode", 0)
+        code = current.get("weather_code", 0)
         durum, _ = hava_durumu_acikla(code)
 
         # ASCII uyumlu temiz Türkçe karakter dönüşümü (TFT ekranda bozulmaması için)

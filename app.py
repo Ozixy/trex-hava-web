@@ -5,7 +5,7 @@ import requests
 
 app = Flask(__name__)
 
-# JSON dosyasından dünya şehirlerini yükle
+# JSON dosyasından dünya veritabanını yükle
 json_yolu = os.path.join(os.path.dirname(__file__), "dunya_sehirleri.json")
 try:
     with open(json_yolu, "r", encoding="utf-8") as f:
@@ -14,25 +14,58 @@ except Exception as e:
     print(f"JSON okuma hatasi: {e}")
     DunyaVeritabani = {}
 
-# Varsayılan başlangıç konumu
 aktif_konum = {
     "ulke": "Türkiye",
     "sehir": "Bursa"
 }
 
 def hava_durumu_acikla(weathercode):
-    if weathercode == 0:
+    try:
+        code = int(weathercode)
+    except:
+        code = 0
+
+    if code == 0:
         return "Gunesli", "☀️"
-    elif weathercode in [1, 2, 3]:
+    elif code in [1, 2, 3]:
         return "Bulutlu", "☁️"
-    elif weathercode in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
+    elif code in [45, 48]:
+        return "Sisli", "🌫️"
+    elif code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
         return "Yagmurlu", "🌧️"
-    elif weathercode in [71, 73, 75, 77, 85, 86]:
+    elif code in [71, 73, 75, 77, 85, 86]:
         return "Karli", "❄️"
-    elif weathercode in [95, 96, 99]:
+    elif code in [95, 96, 99]:
         return "Firtina", "⚡"
     else:
         return "Parcali Bulutlu", "⛅"
+
+def open_meteo_veri_cek(lat, lon):
+    # Hem current hem current_weather parametrelerini ekleyerek garantiye alıyoruz
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code&current_weather=true"
+    res = requests.get(url, timeout=5)
+    data = res.json()
+    
+    sicaklik = None
+    weathercode = 0
+
+    # 1. Öncelik: 'current' bloğu
+    if "current" in data:
+        c = data["current"]
+        sicaklik = c.get("temperature_2m")
+        weathercode = c.get("weather_code", c.get("weathercode", 0))
+
+    # 2. Öncelik: 'current_weather' bloğu (yedek)
+    if sicaklik is None and "current_weather" in data:
+        cw = data["current_weather"]
+        sicaklik = cw.get("temperature")
+        weathercode = cw.get("weathercode", 0)
+
+    # Hiçbiri gelmediyse varsayılan
+    if sicaklik is None:
+        sicaklik = 0
+
+    return round(float(sicaklik)), int(weathercode)
 
 @app.route("/")
 def index():
@@ -64,25 +97,20 @@ def hava_durumu_getir():
         sehir = "Bursa"
         ulke = "Türkiye"
 
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
-    
     try:
-        response = requests.get(url, timeout=5)
-        data = response.json()
-        current = data.get("current_weather", {})
-        sicaklik = current.get("temperature", 0)
-        weathercode = current.get("weathercode", 0)
+        sicaklik, weathercode = open_meteo_veri_cek(lat, lon)
         durum, ikon = hava_durumu_acikla(weathercode)
         
         return jsonify({
             "sehir": sehir,
             "ulke": ulke,
-            "sicaklik": round(sicaklik),
+            "sicaklik": sicaklik,
             "durum": durum,
             "ikon": ikon,
             "weathercode": weathercode
         })
     except Exception as e:
+        print(f"Hava API Hatasi: {e}")
         return jsonify({"hata": str(e)}), 500
 
 @app.route("/api/kaydet", methods=["POST"])
@@ -112,13 +140,8 @@ def cihaz_hava():
         sehir = "Bursa"
         ulke = "Türkiye"
 
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
     try:
-        response = requests.get(url, timeout=5)
-        data = response.json()
-        current = data.get("current_weather", {})
-        temp = round(current.get("temperature", 0))
-        code = current.get("weathercode", 0)
+        temp, code = open_meteo_veri_cek(lat, lon)
         durum, _ = hava_durumu_acikla(code)
 
         temiz_sehir = sehir.replace("ı", "i").replace("İ", "I").replace("ş", "s").replace("Ş", "S").replace("ğ", "g").replace("Ğ", "G").replace("ü", "u").replace("Ü", "U").replace("ö", "o").replace("Ö", "O").replace("ç", "c").replace("Ç", "C")
@@ -132,6 +155,7 @@ def cihaz_hava():
             "code": code
         })
     except Exception as e:
+        print(f"Cihaz API Hatasi: {e}")
         return jsonify({"hata": str(e)}), 500
 
 if __name__ == "__main__":

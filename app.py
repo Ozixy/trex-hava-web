@@ -39,29 +39,30 @@ def hava_durumu_acikla(weathercode):
         return "Parcali Bulutlu", "⛅"
 
 def acik_meteo_verisi_cek(lat, lon):
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code&current_weather=true"
-    try:
-        response = requests.get(url, timeout=7)
-        response.raise_for_status()
-        data = response.json()
-
-        # 1. Öncelik: current objesi
-        current = data.get("current", {})
-        temp = current.get("temperature_2m")
-        code = current.get("weather_code")
-
-        # 2. Öncelik: current_weather objesi (fallback)
-        if temp is None:
-            cw = data.get("current_weather", {})
-            temp = cw.get("temperature")
-            code = cw.get("weathercode")
-
-        if temp is None:
-            raise ValueError("Sicaklik verisi alinamadi")
-
-        sicaklik = round(float(temp))
-        weathercode = int(code) if code is not None else 0
-        return sicaklik, weathercode
+    # Sadece standart 'current' parametresi kullanıyoruz (400 hatası almaz)
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code"
+    
+    headers = {
+        "User-Agent": "TrexWeatherApp/1.0"
+    }
+    
+    response = requests.get(url, headers=headers, timeout=10)
+    data = response.json()
+    
+    # API cevabını konsola yazdır (Render Logs'ta görebilmek için)
+    print(f"Meteo API Yaniti ({lat}, {lon}): {data}")
+    
+    current = data.get("current", {})
+    temp = current.get("temperature_2m")
+    code = current.get("weather_code")
+    
+    if temp is None:
+        raise ValueError(f"Sicaklik alinamadi, donen veri: {data}")
+        
+    sicaklik = round(float(temp))
+    weathercode = int(code) if code is not None else 0
+    
+    return sicaklik, weathercode
     except Exception as e:
         print(f"Open-Meteo Baglanti Hatasi: {e}")
         # Hata durumunda 0 dondurup ekrani dondurmesin
@@ -154,6 +155,7 @@ def cihaz_hava():
             "code": code
         })
     except Exception as e:
+        print(f"[HATA] Hava verisi islenirken sorun cikti: {e}")
         return jsonify({"hata": str(e)}), 500
 
 if __name__ == "__main__":

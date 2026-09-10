@@ -5,7 +5,7 @@ import requests
 
 app = Flask(__name__)
 
-# JSON dosyasından dünya veritabanını oku
+# JSON dosyasından dünya şehirlerini yükle
 json_yolu = os.path.join(os.path.dirname(__file__), "dunya_sehirleri.json")
 try:
     with open(json_yolu, "r", encoding="utf-8") as f:
@@ -14,7 +14,7 @@ except Exception as e:
     print(f"JSON okuma hatasi: {e}")
     DunyaVeritabani = {}
 
-# Kart ve web için aktif seçili konum belleği
+# Varsayılan başlangıç konumu
 aktif_konum = {
     "ulke": "Türkiye",
     "sehir": "Bursa"
@@ -64,13 +64,13 @@ def hava_durumu_getir():
         sehir = "Bursa"
         ulke = "Türkiye"
 
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weathercode"
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
     
     try:
         response = requests.get(url, timeout=5)
         data = response.json()
-        current = data.get("current", {})
-        sicaklik = current.get("temperature_2m", 0)
+        current = data.get("current_weather", {})
+        sicaklik = current.get("temperature", 0)
         weathercode = current.get("weathercode", 0)
         durum, ikon = hava_durumu_acikla(weathercode)
         
@@ -85,7 +85,6 @@ def hava_durumu_getir():
     except Exception as e:
         return jsonify({"hata": str(e)}), 500
 
-# Hem web butonundan hem de kart portalından şehir kaydetmek için rota
 @app.route("/api/kaydet", methods=["POST"])
 @app.route("/api/sehir-sec", methods=["POST"])
 def konumu_kaydet():
@@ -100,7 +99,6 @@ def konumu_kaydet():
     
     return jsonify({"durum": "hata", "mesaj": "Gecersiz konum"}), 400
 
-# LilyGO kartının 3 saniyede bir sorguladığı JSON uç noktası
 @app.route("/api/cihaz-hava")
 def cihaz_hava():
     ulke = aktif_konum["ulke"]
@@ -114,16 +112,15 @@ def cihaz_hava():
         sehir = "Bursa"
         ulke = "Türkiye"
 
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weathercode"
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
     try:
         response = requests.get(url, timeout=5)
         data = response.json()
-        current = data.get("current", {})
-        temp = round(current.get("temperature_2m", 0))
+        current = data.get("current_weather", {})
+        temp = round(current.get("temperature", 0))
         code = current.get("weathercode", 0)
         durum, _ = hava_durumu_acikla(code)
 
-        # ASCII uyumlu temiz Türkçe karakter dönüşümü (TFT ekranda bozulmaması için)
         temiz_sehir = sehir.replace("ı", "i").replace("İ", "I").replace("ş", "s").replace("Ş", "S").replace("ğ", "g").replace("Ğ", "G").replace("ü", "u").replace("Ü", "U").replace("ö", "o").replace("Ö", "O").replace("ç", "c").replace("Ç", "C")
         temiz_ulke = ulke.replace("ü", "u").replace("Ü", "U").replace("İ", "I").replace("ı", "i")
 

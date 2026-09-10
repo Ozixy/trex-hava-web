@@ -39,13 +39,33 @@ def hava_durumu_acikla(weathercode):
         return "Parcali Bulutlu", "⛅"
 
 def acik_meteo_verisi_cek(lat, lon):
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code"
-    response = requests.get(url, timeout=5)
-    data = response.json()
-    current = data.get("current", {})
-    sicaklik = round(current.get("temperature_2m", 0))
-    weathercode = current.get("weather_code", 0)
-    return sicaklik, weathercode
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code&current_weather=true"
+    try:
+        response = requests.get(url, timeout=7)
+        response.raise_for_status()
+        data = response.json()
+
+        # 1. Öncelik: current objesi
+        current = data.get("current", {})
+        temp = current.get("temperature_2m")
+        code = current.get("weather_code")
+
+        # 2. Öncelik: current_weather objesi (fallback)
+        if temp is None:
+            cw = data.get("current_weather", {})
+            temp = cw.get("temperature")
+            code = cw.get("weathercode")
+
+        if temp is None:
+            raise ValueError("Sicaklik verisi alinamadi")
+
+        sicaklik = round(float(temp))
+        weathercode = int(code) if code is not None else 0
+        return sicaklik, weathercode
+    except Exception as e:
+        print(f"Open-Meteo Baglanti Hatasi: {e}")
+        # Hata durumunda 0 dondurup ekrani dondurmesin
+        return 20, 1
 
 @app.route("/")
 def index():

@@ -18,7 +18,8 @@ sonSecim = {
     "lon": 29.0665,
     "sicaklik": None,
     "durum": None,
-    "ikon": ""
+    "ikon": "",
+    "code": -1
 }
 
 # =====================================================
@@ -69,7 +70,8 @@ def sehir_hava_verisi(sehir):
         "lon": lon,
         "sicaklik": round(sicaklik),
         "durum": durum,
-        "ikon": ikon
+        "ikon": ikon,
+        "code": weathercode
     }
 
 # =====================================================
@@ -118,7 +120,8 @@ def hava_durumu_getir():
             "lon": veri["lon"],
             "sicaklik": veri["sicaklik"],
             "durum": veri["durum"],
-            "ikon": veri["ikon"]
+            "ikon": veri["ikon"],
+            "code": veri["code"]
         })
 
     except Exception as e:
@@ -151,6 +154,7 @@ def sehir_kaydet():
         sonSecim["sicaklik"] = havaVerisi["sicaklik"]
         sonSecim["durum"] = havaVerisi["durum"]
         sonSecim["ikon"] = havaVerisi["ikon"]
+        sonSecim["code"] = havaVerisi["code"]
 
         return jsonify({"durum": "basarili", "ulke": ulke, "sehir": sehir})
 
@@ -158,10 +162,17 @@ def sehir_kaydet():
         return jsonify({"durum": "hata", "mesaj": str(e)}), 500
 
 # =====================================================
-# KARTIN OKUYACAGI SON SECIM
+# KARTIN OKUYACAGI SON SECIM (eski isim, geriye donuk uyumluluk)
 # =====================================================
 @app.route("/api/mevcut-secim")
 def mevcut_secimi_getir():
+    return jsonify(sonSecim)
+
+# =====================================================
+# KARTIN OKUYACAGI SON SECIM (main.cpp'nin bekledigi yeni isim)
+# =====================================================
+@app.route("/api/cihaz-hava")
+def cihaz_hava_getir():
     return jsonify(sonSecim)
 
 if __name__ == "__main__":

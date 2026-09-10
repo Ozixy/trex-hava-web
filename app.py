@@ -14,6 +14,7 @@ except Exception as e:
     print(f"JSON okuma hatasi: {e}")
     DunyaVeritabani = {}
 
+# Varsayılan başlangıç konumu
 aktif_konum = {
     "ulke": "Türkiye",
     "sehir": "Bursa"
@@ -41,27 +42,30 @@ def hava_durumu_acikla(weathercode):
         return "Parcali Bulutlu", "⛅"
 
 def open_meteo_veri_cek(lat, lon):
-    # Hem current hem current_weather parametrelerini ekleyerek garantiye alıyoruz
+    # Hem modern current hem klasik current_weather parametresi gönderiyoruz
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code&current_weather=true"
-    res = requests.get(url, timeout=5)
+    headers = {
+        "User-Agent": "TrexWeatherStation/1.0 (ESP32-Project)"
+    }
+    
+    res = requests.get(url, headers=headers, timeout=6)
     data = res.json()
     
     sicaklik = None
     weathercode = 0
 
-    # 1. Öncelik: 'current' bloğu
+    # 1. Öncelik: Modern current bloğu
     if "current" in data:
         c = data["current"]
         sicaklik = c.get("temperature_2m")
         weathercode = c.get("weather_code", c.get("weathercode", 0))
 
-    # 2. Öncelik: 'current_weather' bloğu (yedek)
+    # 2. Öncelik: Geleneksel current_weather bloğu (yedek)
     if sicaklik is None and "current_weather" in data:
         cw = data["current_weather"]
         sicaklik = cw.get("temperature")
         weathercode = cw.get("weathercode", 0)
 
-    # Hiçbiri gelmediyse varsayılan
     if sicaklik is None:
         sicaklik = 0
 
@@ -111,7 +115,7 @@ def hava_durumu_getir():
         })
     except Exception as e:
         print(f"Hava API Hatasi: {e}")
-        return jsonify({"hata": str(e)}), 500
+        return jsonify({"hata": str(e), "sicaklik": 0, "durum": "Bilinmiyor", "ikon": "❓"}), 500
 
 @app.route("/api/kaydet", methods=["POST"])
 @app.route("/api/sehir-sec", methods=["POST"])
@@ -144,6 +148,7 @@ def cihaz_hava():
         temp, code = open_meteo_veri_cek(lat, lon)
         durum, _ = hava_durumu_acikla(code)
 
+        # LilyGO ekranı için Türkçe karakter temizliği
         temiz_sehir = sehir.replace("ı", "i").replace("İ", "I").replace("ş", "s").replace("Ş", "S").replace("ğ", "g").replace("Ğ", "G").replace("ü", "u").replace("Ü", "U").replace("ö", "o").replace("Ö", "O").replace("ç", "c").replace("Ç", "C")
         temiz_ulke = ulke.replace("ü", "u").replace("Ü", "U").replace("İ", "I").replace("ı", "i")
 
@@ -156,7 +161,7 @@ def cihaz_hava():
         })
     except Exception as e:
         print(f"Cihaz API Hatasi: {e}")
-        return jsonify({"hata": str(e)}), 500
+        return jsonify({"hata": str(e), "sicaklik": 0, "durum": "Hata", "code": 0}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

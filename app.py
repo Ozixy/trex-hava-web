@@ -6,9 +6,9 @@ import requests
 app = Flask(__name__)
 
 # =====================================================
-# SEHIR VERITABANI (sehirler.json dosyasindan okunur)
+# SEHIR VERITABANI (countries.json dosyasindan okunur)
 # =====================================================
-JSON_DOSYA_ADI = "sehirler.json"
+JSON_DOSYA_ADI = "countries.json"
 json_yolu = os.path.join(os.path.dirname(__file__), JSON_DOSYA_ADI)
 
 try:
@@ -20,7 +20,7 @@ except Exception as e:
 
 # Kart ve web icin aktif secili konum bellegi
 aktif_konum = {
-    "ulke": "Türkiye",
+    "ulke": "Turkey",
     "sehir": "Bursa"
 }
 
@@ -38,34 +38,27 @@ def hava_durumu_acikla(weathercode):
     else:
         return "Parcali Bulutlu", "⛅"
 
+# =====================================================
+# SEHRIN KOORDINATINI GEOCODING API ILE BUL
+# (countries.json'da koordinat yok, sadece isim listesi var)
+# =====================================================
+def koordinat_bul(sehir):
+    geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={sehir}&count=1"
+    geo_res = requests.get(geo_url, timeout=8).json()
+
+    if "results" in geo_res and len(geo_res["results"]) > 0:
+        return geo_res["results"][0]["latitude"], geo_res["results"][0]["longitude"]
+
+    return None, None
+
 def acik_meteo_verisi_cek(lat, lon):
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code&current_weather=true"
-    try:
-        response = requests.get(url, timeout=7)
-        response.raise_for_status()
-        data = response.json()
-
-        # 1. Öncelik: current objesi
-        current = data.get("current", {})
-        temp = current.get("temperature_2m")
-        code = current.get("weather_code")
-
-        # 2. Öncelik: current_weather objesi (fallback)
-        if temp is None:
-            cw = data.get("current_weather", {})
-            temp = cw.get("temperature")
-            code = cw.get("weathercode")
-
-        if temp is None:
-            raise ValueError("Sicaklik verisi alinamadi")
-
-        sicaklik = round(float(temp))
-        weathercode = int(code) if code is not None else 0
-        return sicaklik, weathercode
-    except Exception as e:
-        print(f"Open-Meteo Baglanti Hatasi: {e}")
-        # Hata durumunda 0 dondurup ekrani dondurmesin
-        return 20, 1
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code"
+    response = requests.get(url, timeout=8)
+    data = response.json()
+    current = data.get("current", {})
+    sicaklik = round(current.get("temperature_2m", 0))
+    weathercode = current.get("weather_code", 0)
+    return sicaklik, weathercode
 
 @app.route("/")
 def index():
@@ -79,9 +72,9 @@ def index():
 
 @app.route("/api/sehirler")
 def sehirleri_getir():
-    ulke = request.args.get("ulke", "Türkiye")
+    ulke = request.args.get("ulke", "Turkey")
     if ulke in DunyaVeritabani:
-        return jsonify(sorted(list(DunyaVeritabani[ulke].keys())))
+        return jsonify(sorted(DunyaVeritabani[ulke]))
     return jsonify([])
 
 @app.route("/api/hava")
@@ -89,13 +82,12 @@ def hava_durumu_getir():
     ulke = request.args.get("ulke", aktif_konum["ulke"])
     sehir = request.args.get("sehir", aktif_konum["sehir"])
 
-    try:
-        lat = DunyaVeritabani[ulke][sehir]["lat"]
-        lon = DunyaVeritabani[ulke][sehir]["lon"]
-    except KeyError:
-        lat, lon = 40.1828, 29.0665
-        sehir = "Bursa"
-        ulke = "Türkiye"
+    if ulke not in DunyaVeritabani or sehir not in DunyaVeritabani[ulke]:
+        return jsonify({"hata": "Gecersiz ulke/sehir"}), 400
+
+    lat, lon = koordinat_bul(sehir)
+    if lat is None:
+        return jsonify({"hata": "Koordinat bulunamadi"}), 404
 
     try:
         sicaklik, weathercode = acik_meteo_verisi_cek(lat, lon)
@@ -131,13 +123,11 @@ def cihaz_hava():
     ulke = aktif_konum["ulke"]
     sehir = aktif_konum["sehir"]
 
-    try:
-        lat = DunyaVeritabani[ulke][sehir]["lat"]
-        lon = DunyaVeritabani[ulke][sehir]["lon"]
-    except KeyError:
+    lat, lon = koordinat_bul(sehir)
+    if lat is None:
         lat, lon = 40.1828, 29.0665
         sehir = "Bursa"
-        ulke = "Türkiye"
+        ulke = "Turkey"
 
     try:
         temp, code = acik_meteo_verisi_cek(lat, lon)
